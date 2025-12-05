@@ -1,0 +1,42 @@
+name: Deploy Extension
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: install Nodejs
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+      - name: Install dependencies
+        run: npm ci
+      - name: Publish to Visual Studio Marketplace
+        id: publish_vsx
+        uses: HaaLeo/publish-vscode-extension@v2
+        with:
+          pat: ${{ secrets.VS_MARKETPLACE_TOKEN }}
+          registryUrl: https://marketplace.visualstudio.com
+          skipDuplicate: true
+      - name: Archive VSIX file
+        uses: actions/upload-artifact@v4
+        with:
+          name: VSIX
+          path: ${{ steps.publish_vsx.outputs.vsixPath }}
+      - name: Create a release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ steps.publish_vsx.outputs.vsixPath }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

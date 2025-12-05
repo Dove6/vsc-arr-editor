@@ -1,0 +1,62 @@
+{
+	"name": "arr-editor",
+	"displayName": "ARR Editor",
+	"description": "Custom editor for ARR data file",
+	"version": "0.0.1",
+	"publisher": "dove6",
+	"private": true,
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Dove6/vsc-arr-editor"
+	},
+	"bugs": {
+		"url": "https://github.com/Dove6/vsc-arr-editor/issues"
+	},
+	"engines": {
+		"vscode": "^1.100.0"
+	},
+	"categories": [
+		"Other",
+		"Visualization"
+	],
+	"activationEvents": [
+    	"onStartupFinished"
+	],
+	"main": "./out/extension.js",
+	"contributes": {
+		"customEditors": [
+			{
+				"viewType": "arrEditor.editor",
+				"displayName": "Paw Draw",
+				"selector": [
+					{
+						"filenamePattern": "*.arr"
+					}
+				]
+			}
+		],
+		"commands": [
+			{
+				"command": "arrEditor.editor.new",
+				"title": "Create new ARR file",
+				"category": "ARR"
+			}
+		]
+	},
+	"scripts": {
+		"vscode:prepublish": "npm run compile",
+		"compile": "tsc -p ./",
+		"lint": "eslint",
+		"watch": "tsc -w -p ./"
+	},
+	"devDependencies": {
+		"@eslint/js": "^9.13.0",
+		"@stylistic/eslint-plugin": "^2.9.0",
+		"@types/node": "^22",
+		"@types/vscode": "^1.100.0",
+		"eslint": "^9.13.0",
+		"typescript": "^5.9.2",
+		"typescript-eslint": "^8.39.0"
+	}
+}
