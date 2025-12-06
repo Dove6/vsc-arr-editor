@@ -1,6 +1,6 @@
 # ARRnold - VS Code extension for editing ARR files
 
-The `arr-editor` extension allows for displaying and modifying ARR files. The format was used by Aidem Media in their point-and-click games.
+The [`arr-editor`](https://marketplace.visualstudio.com/items?itemName=dove6.arr-editor) extension allows for displaying and modifying ARR files. The format was used by Aidem Media in their point-and-click games.
 
 ## Ackonwledgements
 
