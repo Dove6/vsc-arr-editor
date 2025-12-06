@@ -2,6 +2,7 @@
 	"name": "arr-editor",
 	"displayName": "ARRnold - ARR Format Editor",
 	"description": "Custom editor for ARR data file",
+	"icon": "./arrLogo.png",
 	"version": "0.0.1",
 	"publisher": "dove6",
 	"private": true,
