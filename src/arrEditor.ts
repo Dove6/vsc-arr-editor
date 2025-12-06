@@ -2,12 +2,26 @@ import * as vscode from 'vscode';
 import { Disposable, disposeAll } from './dispose';
 import { getNonce } from './util';
 
-/**
- * Define the type of edits used in paw draw files.
- */
-interface ArrEdit {
-	readonly color: string;
-	readonly stroke: ReadonlyArray<[number, number]>;
+type ArrEntry = ArrEntryInt | ArrEntryString | ArrEntryBool | ArrEntryDouble;
+
+interface ArrEntryInt {
+	type: 'int',
+	value: number,
+}
+
+interface ArrEntryString {
+	type: 'string',
+	value: string,
+}
+
+interface ArrEntryBool {
+	type: 'bool',
+	value: boolean,
+}
+
+interface ArrEntryDouble {
+	type: 'double',
+	value: number,
 }
 
 interface ArrDocumentDelegate {
@@ -40,8 +54,8 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
 	private readonly _uri: vscode.Uri;
 
 	private _documentData: Uint8Array;
-	private _edits: ArrEdit[] = [];
-	private _savedEdits: ArrEdit[] = [];
+	private _entries: ArrEntry[] = [];
+	private _savedEntries: ArrEntry[] = [];
 
 	private readonly _delegate: ArrDocumentDelegate;
 
@@ -68,7 +82,7 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
 
 	private readonly _onDidChangeDocument = this._register(new vscode.EventEmitter<{
 		readonly content?: Uint8Array;
-		readonly edits: readonly ArrEdit[];
+		readonly entries: readonly ArrEntry[];
 	}>());
 	/**
 	 * Fired to notify webviews that the document has changed.
@@ -102,21 +116,21 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
 	 *
 	 * This fires an event to notify VS Code that the document has been edited.
 	 */
-	makeEdit(edit: ArrEdit) {
-		this._edits.push(edit);
+	addEntry(entry: ArrEntry) {
+		this._entries.push(entry);
 
 		this._onDidChange.fire({
-			label: 'Stroke',
+			label: 'Add entry',
 			undo: async () => {
-				this._edits.pop();
+				this._entries.pop();
 				this._onDidChangeDocument.fire({
-					edits: this._edits,
+					entries: this._entries,
 				});
 			},
 			redo: async () => {
-				this._edits.push(edit);
+				this._entries.push(entry);
 				this._onDidChangeDocument.fire({
-					edits: this._edits,
+					entries: this._entries,
 				});
 			}
 		});
@@ -127,7 +141,7 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
 	 */
 	async save(cancellation: vscode.CancellationToken): Promise<void> {
 		await this.saveAs(this.uri, cancellation);
-		this._savedEdits = Array.from(this._edits);
+		this._savedEntries = [...this._entries];
 	}
 
 	/**
@@ -147,10 +161,10 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
 	async revert(_cancellation: vscode.CancellationToken): Promise<void> {
 		const diskContent = await ArrDocument.readFile(this.uri);
 		this._documentData = diskContent;
-		this._edits = this._savedEdits;
+		this._entries = this._savedEntries;
 		this._onDidChangeDocument.fire({
 			content: diskContent,
-			edits: this._edits,
+			entries: this._entries,
 		});
 	}
 
@@ -176,9 +190,9 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
 }
 
 /**
- * Provider for paw draw editors.
+ * Provider for ARR editors.
  *
- * Paw draw editors are used for `.pawDraw` files, which are just `.png` files with a different file extension.
+ * ARR editors are used for `.arr` files which are used to store an array of typed data.
  *
  * This provider demonstrates:
  *
@@ -192,17 +206,17 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
  */
 export class ArrEditorProvider implements vscode.CustomEditorProvider<ArrDocument> {
 
-	private static newPawDrawFileId = 1;
+	private static newArrFileId = 1;
 
 	public static register(context: vscode.ExtensionContext): vscode.Disposable {
-		vscode.commands.registerCommand('catCustoms.pawDraw.new', () => {
+		vscode.commands.registerCommand('arrEditor.editor.new', () => {
 			const workspaceFolders = vscode.workspace.workspaceFolders;
 			if (!workspaceFolders) {
-				vscode.window.showErrorMessage("Creating new Paw Draw files currently requires opening a workspace");
+				vscode.window.showErrorMessage("Creating new ARR files currently requires opening a workspace");
 				return;
 			}
 
-			const uri = vscode.Uri.joinPath(workspaceFolders[0].uri, `new-${ArrEditorProvider.newPawDrawFileId++}.pawdraw`)
+			const uri = vscode.Uri.joinPath(workspaceFolders[0].uri, `new-${ArrEditorProvider.newArrFileId++}.arr`)
 				.with({ scheme: 'untitled' });
 
 			vscode.commands.executeCommand('vscode.openWith', uri, ArrEditorProvider.viewType);
@@ -222,7 +236,7 @@ export class ArrEditorProvider implements vscode.CustomEditorProvider<ArrDocumen
 			});
 	}
 
-	private static readonly viewType = 'catCustoms.pawDraw';
+	private static readonly viewType = 'arrEditor.editor';
 
 	/**
 	 * Tracks all known webviews
@@ -266,7 +280,7 @@ export class ArrEditorProvider implements vscode.CustomEditorProvider<ArrDocumen
 			// Update all webviews when the document changes
 			for (const webviewPanel of this.webviews.get(document.uri)) {
 				this.postMessage(webviewPanel, 'update', {
-					edits: e.edits,
+					entries: e.entries,
 					content: e.content,
 				});
 			}
@@ -340,7 +354,7 @@ export class ArrEditorProvider implements vscode.CustomEditorProvider<ArrDocumen
 	private getHtmlForWebview(webview: vscode.Webview): string {
 		// Local path to script and css for the webview
 		const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(
-			this._context.extensionUri, 'media', 'pawDraw.js'));
+			this._context.extensionUri, 'media', 'main.js'));
 
 		const styleResetUri = webview.asWebviewUri(vscode.Uri.joinPath(
 			this._context.extensionUri, 'media', 'reset.css'));
@@ -349,7 +363,23 @@ export class ArrEditorProvider implements vscode.CustomEditorProvider<ArrDocumen
 			this._context.extensionUri, 'media', 'vscode.css'));
 
 		const styleMainUri = webview.asWebviewUri(vscode.Uri.joinPath(
-			this._context.extensionUri, 'media', 'pawDraw.css'));
+			this._context.extensionUri, 'media', 'styles.css'));
+
+		const tableUri = webview.asWebviewUri(vscode.Uri.joinPath(
+			this._context.extensionUri, 'node_modules', '@vscode-elements/elements-lite', 'components', 'table', 'table.css'));
+
+		const labelUri = webview.asWebviewUri(vscode.Uri.joinPath(
+			this._context.extensionUri, 'node_modules', '@vscode-elements/elements-lite', 'components', 'label', 'label.css'));
+
+		const selectUri = webview.asWebviewUri(vscode.Uri.joinPath(
+			this._context.extensionUri, 'node_modules', '@vscode-elements/elements-lite', 'components', 'select', 'select.css'));
+
+		const textFieldUri = webview.asWebviewUri(vscode.Uri.joinPath(
+			this._context.extensionUri, 'node_modules', '@vscode-elements/elements-lite', 'components', 'textfield', 'textfield.css'));
+
+		const buttonUri = webview.asWebviewUri(vscode.Uri.joinPath(
+			this._context.extensionUri, 'node_modules', '@vscode-elements/elements-lite', 'components', 'button', 'button.css'));
+
 
 		// Use a nonce to whitelist which scripts can be run
 		const nonce = getNonce();
@@ -359,31 +389,41 @@ export class ArrEditorProvider implements vscode.CustomEditorProvider<ArrDocumen
 			<html lang="en">
 			<head>
 				<meta charset="UTF-8">
-
-				<!--
-				Use a content security policy to only allow loading images from https or from our extension directory,
-				and only allow scripts that have a specific nonce.
-				-->
 				<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} blob:; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
-
 				<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 				<link href="${styleResetUri}" rel="stylesheet" />
 				<link href="${styleVSCodeUri}" rel="stylesheet" />
 				<link href="${styleMainUri}" rel="stylesheet" />
+				<link href="${tableUri}" rel="stylesheet" />
+				<link href="${labelUri}" rel="stylesheet" />
+				<link href="${selectUri}" rel="stylesheet" />
+				<link href="${textFieldUri}" rel="stylesheet" />
+				<link href="${buttonUri}" rel="stylesheet" />
 
-				<title>Paw Draw</title>
+				<title>ARR</title>
 			</head>
 			<body>
-				<div class="drawing-canvas"></div>
-
-				<div class="drawing-controls">
-					<button data-color="black" class="black active" title="Black"></button>
-					<button data-color="white" class="white" title="White"></button>
-					<button data-color="red" class="red" title="Red"></button>
-					<button data-color="green" class="green" title="Green"></button>
-					<button data-color="blue" class="blue" title="Blue"></button>
-				</div>
+				<table id="arr-table-main" class="vscode-table">
+					<thead>
+						<tr>
+							<th>Index</th>
+							<th>Type</th>
+							<th>Value</th>
+						</tr>
+					</thead>
+					<tfoot>
+						<tr>
+							<td></td>
+							<td></td>
+							<td>
+								<button id="arr-button-add-entry" class="vscode-button">
+									Add entry
+								</button>
+							</td>
+						</tr>
+					</tfoot>
+				</table>
 
 				<script nonce="${nonce}" src="${scriptUri}"></script>
 			</body>
@@ -406,8 +446,8 @@ export class ArrEditorProvider implements vscode.CustomEditorProvider<ArrDocumen
 
 	private onMessage(document: ArrDocument, message: any) {
 		switch (message.type) {
-			case 'stroke':
-				document.makeEdit(message as ArrEdit);
+			case 'add-entry':
+				document.addEntry(message.data as ArrEntry);
 				return;
 
 			case 'response':

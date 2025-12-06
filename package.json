@@ -1,6 +1,6 @@
 {
 	"name": "arr-editor",
-	"displayName": "ARR Editor",
+	"displayName": "ARRnold - ARR Format Editor",
 	"description": "Custom editor for ARR data file",
 	"version": "0.0.1",
 	"publisher": "dove6",
@@ -21,14 +21,14 @@
 		"Visualization"
 	],
 	"activationEvents": [
-    	"onStartupFinished"
+		"onStartupFinished"
 	],
 	"main": "./out/extension.js",
 	"contributes": {
 		"customEditors": [
 			{
 				"viewType": "arrEditor.editor",
-				"displayName": "Paw Draw",
+				"displayName": "ARR",
 				"selector": [
 					{
 						"filenamePattern": "*.arr"
@@ -58,5 +58,9 @@
 		"eslint": "^9.13.0",
 		"typescript": "^5.9.2",
 		"typescript-eslint": "^8.39.0"
+	},
+	"dependencies": {
+		"@vscode-elements/elements-lite": "^0.4.0",
+		"reksio-formats": "0.0.3"
 	}
 }
