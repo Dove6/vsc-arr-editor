@@ -127,9 +127,9 @@
 			// @ts-ignore
 			this.mainTableBody = parent.querySelector('tbody');
 			// @ts-ignore
-			this.addingIndexCell = parent.querySelector('tfoot th:nth-child(1)');
+			this.addingIndexCell = parent.querySelector('tfoot tr :nth-child(1)');
 			// @ts-ignore
-			this.addingTypeCell = parent.querySelector('tfoot th:nth-child(2)');
+			this.addingTypeCell = parent.querySelector('tfoot tr :nth-child(2)');
 			// @ts-ignore
 			this.addingButton = parent.querySelector('#arr-button-add-entry');
 
@@ -168,6 +168,8 @@
 			for (let i = this.mainTableBody.children.length - 1; i >= this.entries.length; i--) {
 				this.mainTableBody.removeChild(this.mainTableBody.children[i]);
 			}
+			this.addingIndexCell.innerText = this.entries.length.toString();
+			this.addingTypeCell.innerText = 'string';
 		}
 
 		/**
@@ -183,7 +185,7 @@
 
 	// Handle messages from the extension
 	window.addEventListener('message', async e => {
-		const { type, body, requestId } = e.data;
+		const { type, body } = e.data;
 		switch (type) {
 			case 'init': {
 				editor.setEditable(body.editable);

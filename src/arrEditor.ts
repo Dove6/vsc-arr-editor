@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { Disposable, disposeAll } from './dispose';
 import { getNonce } from './util';
+import { deserializeArray, serializeArray } from 'reksio-formats/archive/array';
 
 type ArrEntry = ArrEntryInt | ArrEntryString | ArrEntryBool | ArrEntryDouble;
 
@@ -24,10 +25,6 @@ interface ArrEntryDouble {
 	value: number,
 }
 
-interface ArrDocumentDelegate {
-	getFileData(): Promise<Uint8Array>;
-}
-
 /**
  * Define the document (the data model) used for paw draw files.
  */
@@ -36,12 +33,11 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
 	static async create(
 		uri: vscode.Uri,
 		backupId: string | undefined,
-		delegate: ArrDocumentDelegate,
 	): Promise<ArrDocument | PromiseLike<ArrDocument>> {
 		// If we have a backup, read that. Otherwise read the resource from the workspace
 		const dataFile = typeof backupId === 'string' ? vscode.Uri.parse(backupId) : uri;
 		const fileData = await ArrDocument.readFile(dataFile);
-		return new ArrDocument(uri, fileData, delegate);
+		return new ArrDocument(uri, fileData as Uint8Array<ArrayBuffer>);
 	}
 
 	private static async readFile(uri: vscode.Uri): Promise<Uint8Array> {
@@ -53,26 +49,31 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
 
 	private readonly _uri: vscode.Uri;
 
-	private _documentData: Uint8Array;
 	private _entries: ArrEntry[] = [];
 	private _savedEntries: ArrEntry[] = [];
 
-	private readonly _delegate: ArrDocumentDelegate;
-
 	private constructor(
 		uri: vscode.Uri,
-		initialContent: Uint8Array,
-		delegate: ArrDocumentDelegate
+		initialContent: Uint8Array<ArrayBuffer>,
 	) {
 		super();
 		this._uri = uri;
-		this._documentData = initialContent;
-		this._delegate = delegate;
+		this._entries = this.deserializeEntries(initialContent.buffer);
+		this._savedEntries = [...this._entries];
+	}
+
+	private deserializeEntries(buffer: ArrayBuffer): ArrEntry[] {
+		return deserializeArray(buffer).map(e => {
+			switch (typeof e) {
+				case 'string': return { type: 'string', value: e };
+				case 'boolean': return { type: 'bool', value: e };
+				case 'number': return Number.isInteger(e) ? { type: 'int', value: e } : { type: 'double', value: e };
+			}
+		});
 	}
 
 	public get uri() { return this._uri; }
-
-	public get documentData(): Uint8Array { return this._documentData; }
+	public get entries(): ArrEntry[] { return this._entries; }
 
 	private readonly _onDidDispose = this._register(new vscode.EventEmitter<void>());
 	/**
@@ -134,6 +135,10 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
 				});
 			}
 		});
+
+		this._onDidChangeDocument.fire({
+			entries: this._entries,
+		});
 	}
 
 	/**
@@ -148,7 +153,9 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
 	 * Called by VS Code when the user saves the document to a new location.
 	 */
 	async saveAs(targetResource: vscode.Uri, cancellation: vscode.CancellationToken): Promise<void> {
-		const fileData = await this._delegate.getFileData();
+		console.log(this._entries);
+		const fileData = new Uint8Array(serializeArray(this._entries));
+		console.log(fileData);
 		if (cancellation.isCancellationRequested) {
 			return;
 		}
@@ -160,8 +167,8 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
 	 */
 	async revert(_cancellation: vscode.CancellationToken): Promise<void> {
 		const diskContent = await ArrDocument.readFile(this.uri);
-		this._documentData = diskContent;
-		this._entries = this._savedEntries;
+		this._entries = this.deserializeEntries(diskContent.buffer as ArrayBuffer);
+		this._savedEntries = [...this._entries];
 		this._onDidChangeDocument.fire({
 			content: diskContent,
 			entries: this._entries,
@@ -254,17 +261,7 @@ export class ArrEditorProvider implements vscode.CustomEditorProvider<ArrDocumen
 		openContext: { backupId?: string },
 		_token: vscode.CancellationToken
 	): Promise<ArrDocument> {
-		const document: ArrDocument = await ArrDocument.create(uri, openContext.backupId, {
-			getFileData: async () => {
-				const webviewsForDocument = Array.from(this.webviews.get(document.uri));
-				if (!webviewsForDocument.length) {
-					throw new Error('Could not find webview to save for');
-				}
-				const panel = webviewsForDocument[0];
-				const response = await this.postMessageWithResponse<number[]>(panel, 'getFileData', {});
-				return new Uint8Array(response);
-			}
-		});
+		const document: ArrDocument = await ArrDocument.create(uri, openContext.backupId);
 
 		const listeners: vscode.Disposable[] = [];
 
@@ -314,13 +311,14 @@ export class ArrEditorProvider implements vscode.CustomEditorProvider<ArrDocumen
 					this.postMessage(webviewPanel, 'init', {
 						untitled: true,
 						editable: true,
+						entries: [],
 					});
 				} else {
 					const editable = vscode.workspace.fs.isWritableFileSystem(document.uri.scheme);
 
 					this.postMessage(webviewPanel, 'init', {
-						value: document.documentData,
 						editable,
+						entries: document.entries,
 					});
 				}
 			}
@@ -412,6 +410,7 @@ export class ArrEditorProvider implements vscode.CustomEditorProvider<ArrDocumen
 							<th>Value</th>
 						</tr>
 					</thead>
+					<tbody></tbody>
 					<tfoot>
 						<tr>
 							<td></td>
@@ -430,15 +429,7 @@ export class ArrEditorProvider implements vscode.CustomEditorProvider<ArrDocumen
 			</html>`;
 	}
 
-	private _requestId = 1;
 	private readonly _callbacks = new Map<number, (response: any) => void>();
-
-	private postMessageWithResponse<R = unknown>(panel: vscode.WebviewPanel, type: string, body: any): Promise<R> {
-		const requestId = this._requestId++;
-		const p = new Promise<R>(resolve => this._callbacks.set(requestId, resolve));
-		panel.webview.postMessage({ type, requestId, body });
-		return p;
-	}
 
 	private postMessage(panel: vscode.WebviewPanel, type: string, body: any): void {
 		panel.webview.postMessage({ type, body });
@@ -446,16 +437,15 @@ export class ArrEditorProvider implements vscode.CustomEditorProvider<ArrDocumen
 
 	private onMessage(document: ArrDocument, message: any) {
 		switch (message.type) {
-			case 'add-entry':
+			case 'add-entry': {
 				document.addEntry(message.data as ArrEntry);
 				return;
-
-			case 'response':
-				{
-					const callback = this._callbacks.get(message.requestId);
-					callback?.(message.body);
-					return;
-				}
+			}
+			case 'response':{
+				const callback = this._callbacks.get(message.requestId);
+				callback?.(message.body);
+				return;
+			}
 		}
 	}
 }
