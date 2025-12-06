@@ -61,6 +61,7 @@
 	},
 	"dependencies": {
 		"@vscode-elements/elements-lite": "^0.4.0",
+		"iconv-lite": "^0.7.0",
 		"reksio-formats": "0.0.3"
 	}
 }

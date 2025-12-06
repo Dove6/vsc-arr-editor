@@ -1,26 +1,26 @@
 import * as vscode from 'vscode';
 import { Disposable, disposeAll } from './dispose';
 import { getNonce } from './util';
-import { deserializeArray, serializeArray } from 'reksio-formats/archive/array';
+import { deserializeArray, serializeArray } from './fileFormats/archive/array';
 
-type ArrEntry = ArrEntryInt | ArrEntryString | ArrEntryBool | ArrEntryDouble;
+export type ArrEntry = ArrEntryInt | ArrEntryString | ArrEntryBool | ArrEntryDouble;
 
-interface ArrEntryInt {
+export interface ArrEntryInt {
 	type: 'int',
 	value: number,
 }
 
-interface ArrEntryString {
+export interface ArrEntryString {
 	type: 'string',
 	value: string,
 }
 
-interface ArrEntryBool {
+export interface ArrEntryBool {
 	type: 'bool',
 	value: boolean,
 }
 
-interface ArrEntryDouble {
+export interface ArrEntryDouble {
 	type: 'double',
 	value: number,
 }
@@ -58,18 +58,8 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
 	) {
 		super();
 		this._uri = uri;
-		this._entries = this.deserializeEntries(initialContent.buffer);
+		this._entries = deserializeArray(initialContent.buffer);
 		this._savedEntries = [...this._entries];
-	}
-
-	private deserializeEntries(buffer: ArrayBuffer): ArrEntry[] {
-		return deserializeArray(buffer).map(e => {
-			switch (typeof e) {
-				case 'string': return { type: 'string', value: e };
-				case 'boolean': return { type: 'bool', value: e };
-				case 'number': return Number.isInteger(e) ? { type: 'int', value: e } : { type: 'double', value: e };
-			}
-		});
 	}
 
 	public get uri() { return this._uri; }
@@ -154,7 +144,7 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
 	 */
 	async saveAs(targetResource: vscode.Uri, cancellation: vscode.CancellationToken): Promise<void> {
 		console.log(this._entries);
-		const fileData = new Uint8Array(serializeArray(this._entries));
+		const fileData = serializeArray(this._entries);
 		console.log(fileData);
 		if (cancellation.isCancellationRequested) {
 			return;
@@ -167,7 +157,7 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
 	 */
 	async revert(_cancellation: vscode.CancellationToken): Promise<void> {
 		const diskContent = await ArrDocument.readFile(this.uri);
-		this._entries = this.deserializeEntries(diskContent.buffer as ArrayBuffer);
+		this._entries = deserializeArray(diskContent.buffer);
 		this._savedEntries = [...this._entries];
 		this._onDidChangeDocument.fire({
 			content: diskContent,
