@@ -6,86 +6,11 @@
 	const vscode = acquireVsCodeApi();
 
 	class ArrEntry {
-		type;
-		value;
-
-		constructor(/** @type {string} */ type, /** @type { string | number | boolean | null | undefined } */ value = undefined) {
+		/** @type {string} */ type;
+		/** @type {string} */ value;
+		constructor(/** @type {string} */ type, /** @type {string} */ value) {
 			this.type = type;
-			this.value = value ?? '';
-			this.switchType(type);
-		}
-
-		switchType(/** @type {string} */ type) {
-			switch (type) {
-				case 'int': {
-					switch (typeof this.value) {
-						case 'number': {
-							this.value = Math.trunc(this.value);
-							break;
-						}
-						case 'boolean': {
-							this.value = this.value ? 1 : 0;
-							break;
-						}
-						case 'string': {
-							this.value = parseInt(this.value);
-							if (isNaN(this.value)) {
-								this.value = 0;
-							}
-							break;
-						}
-					}
-					break;
-				}
-				case 'string': {
-					this.value = this.stringValue;
-					break;
-				}
-				case 'bool': {
-					switch (typeof this.value) {
-						case 'number': {
-							this.value = this.value == 1;
-							break;
-						}
-						case 'string': {
-							this.value = this.value == '1' || this.value.toUpperCase().trim() == 'TRUE';
-							break;
-						}
-					}
-					break;
-				}
-				case 'double': {
-					switch (typeof this.value) {
-						case 'boolean': {
-							this.value = this.value ? 1 : 0;
-							break;
-						}
-						case 'string': {
-							this.value = parseFloat(this.value);
-							if (isNaN(this.value)) {
-								this.value = 0;
-							}
-							break;
-						}
-					}
-					break;
-				}
-				default: {
-					throw new Error('Bad type');
-				}
-			}
-
-			this.type = type;
-		}
-
-		get stringValue() {
-			if (typeof this.value === 'number') {
-				return this.type === 'double' ? this.value.toFixed(4) : this.value.toString();
-			}
-			if (typeof this.value === 'boolean') {
-				return this.value ? 'TRUE' : 'FALSE';
-			}
-			return this.value;
+			this.value = value;
 		}
 	}
 
@@ -99,7 +24,7 @@
 		// @ts-ignore
 		/** @type {HTMLTableCellElement} */ addingIndexCell;
 		// @ts-ignore
-		/** @type {HTMLTableCellElement} */ addingTypeCell;
+		/** @type {HTMLSelectElement} */ addingTypeSelect;
 		// @ts-ignore
 		/** @type {HTMLButtonElement} */ addingButton;
 
@@ -129,34 +54,78 @@
 			// @ts-ignore
 			this.addingIndexCell = parent.querySelector('tfoot tr :nth-child(1)');
 			// @ts-ignore
-			this.addingTypeCell = parent.querySelector('tfoot tr :nth-child(2)');
+			this.addingTypeSelect = parent.querySelector('tfoot tr :nth-child(2) select');
 			// @ts-ignore
 			this.addingButton = parent.querySelector('#arr-button-add-entry');
 
 			this.addingButton.addEventListener('click', () => {
-				const newEntry = new ArrEntry(this.addingTypeCell.innerText);
 				vscode.postMessage({
 					type: 'add-entry',
-					data: newEntry,
+					data: { type: Number(this.addingTypeSelect.selectedOptions[0].value) },
 				});
 			});
+		}
+
+		static _types = [
+			{ name: 'INTEGER', value: '1' },
+			{ name: 'STRING', value: '2' },
+			{ name: 'BOOL', value: '3' },
+			{ name: 'DOUBLE', value: '4' },
+		];
+
+		static _createTypeSelect() {
+			const typeSelect = document.createElement('select');
+			for (const { name, value } of ArrEditor._types) {
+				typeSelect.appendChild(new Option(name, value));
+			}
+			typeSelect.classList.add('vscode-select');
+			return typeSelect;
 		}
 
 		_redraw() {
 			for (let i = 0; i < Math.min(this.mainTableBody.children.length, this.entries.length); i++) {
 				// @ts-ignore
 				const /** @type {HTMLTableCellElement[]} */ [indexCell, typeCell, valueCell] = [...this.mainTableBody.children[i].children];
+				// @ts-ignore
+				const /** @type {HTMLSelectElement} */ typeSelect = typeCell.children[0];
 				indexCell.innerText = i.toString();
-				typeCell.innerText = this.entries[i].type;
-				valueCell.innerText = this.entries[i].stringValue;
+				// @ts-ignore
+				typeSelect.value = this.entries[i].type;
+				valueCell.innerText = this.entries[i].value;
 			}
 			for (let i = this.mainTableBody.children.length; i < this.entries.length; i++) {
+				const typeSelect = ArrEditor._createTypeSelect();
+				typeSelect.addEventListener('input', () => {
+					vscode.postMessage({
+						type: 'set-type',
+						data: {
+							index: i,
+							type: typeSelect.selectedOptions[0].value,
+						},
+					});
+				});
+				
 				const indexCell = document.createElement('td');
 				const typeCell = document.createElement('td');
 				const valueCell = document.createElement('td');
 				indexCell.innerText = i.toString();
-				typeCell.innerText = this.entries[i].type;
-				valueCell.innerText = this.entries[i].stringValue;
+				typeCell.appendChild(typeSelect);
+				valueCell.innerText = this.entries[i].value;
+				valueCell.contentEditable = 'plaintext-only';
+				valueCell.addEventListener('blur', () => {
+					vscode.postMessage({
+						type: 'set-value',
+						data: {
+							index: i,
+							value: valueCell.innerText,
+						},
+					});
+				});
+				valueCell.addEventListener('keydown', e => {
+					if (e.key === 'Enter') {
+						valueCell.blur();
+					}
+				});
 
 				const row = document.createElement('tr');
 				row.appendChild(indexCell);
@@ -169,7 +138,6 @@
 				this.mainTableBody.removeChild(this.mainTableBody.children[i]);
 			}
 			this.addingIndexCell.innerText = this.entries.length.toString();
-			this.addingTypeCell.innerText = 'string';
 		}
 
 		/**
@@ -189,11 +157,11 @@
 		switch (type) {
 			case 'init': {
 				editor.setEditable(body.editable);
-				const entries = body.entries.map((/** @type {{ type: string, value: string | number | boolean }} */ e) => new ArrEntry(e.type, e.value));
+				const entries = body.entries;
 				await editor.reset(entries);
 			}
 			case 'update': {
-				const entries = body.entries.map((/** @type {{ type: string, value: string | number | boolean }} */ e) => new ArrEntry(e.type, e.value));
+				const entries = body.entries;
 				await editor.reset(entries);
 				return;
 			}

@@ -1,29 +1,121 @@
 import * as vscode from 'vscode';
 import { Disposable, disposeAll } from './dispose';
 import { getNonce } from './util';
-import { deserializeArray, serializeArray } from './fileFormats/archive/array';
+import { deserializeArray, serializeArray, ArrEntry, ValueType, getValueType } from './fileFormats/archive/array';
 
-export type ArrEntry = ArrEntryInt | ArrEntryString | ArrEntryBool | ArrEntryDouble;
 
-export interface ArrEntryInt {
-	type: 'int',
-	value: number,
-}
+interface WebviewArrEntry {
+	type: '1' | '2' | '3' | '4';
+	value: 'string';
+};
 
-export interface ArrEntryString {
-	type: 'string',
-	value: string,
-}
+const makeIntegerEntry = (value: ArrEntry) => {
+	switch (typeof(value)) {
+		case 'bigint': {
+			return value;
+		}
+		case 'string': {
+			const parsedValue = parseFloat(value);
+			if (isNaN(parsedValue)) {
+				return 0n;
+			}
+			return BigInt(Math.trunc(parsedValue));
+		}
+		case 'boolean': {
+			return BigInt(value);
+		}
+		case 'number': {
+			return BigInt(Math.trunc(value));
+		}
+		default: {
+			throw new Error(`Unsupported type: ${typeof(value)}`);
+		}
+	}
+};
 
-export interface ArrEntryBool {
-	type: 'bool',
-	value: boolean,
-}
+const makeStringEntry = (value: ArrEntry) => {
+	switch (typeof(value)) {
+		case 'bigint': {
+			return value.toString();
+		}
+		case 'string': {
+			return value;
+		}
+		case 'boolean': {
+			return value ? 'TRUE' : 'FALSE';
+		}
+		case 'number': {
+			return value.toFixed(4);
+		}
+		default: {
+			throw new Error(`Unsupported type: ${typeof(value)}`);
+		}
+	}
+};
 
-export interface ArrEntryDouble {
-	type: 'double',
-	value: number,
-}
+const makeBoolEntry = (value: ArrEntry) => {
+	switch (typeof(value)) {
+		case 'bigint': {
+			return value === 0n;
+		}
+		case 'string': {
+			return value == '1' || value.toUpperCase().trim() == 'TRUE';
+		}
+		case 'boolean': {
+			return value;
+		}
+		case 'number': {
+			return value === 0;
+		}
+		default: {
+			throw new Error(`Unsupported type: ${typeof(value)}`);
+		}
+	}
+};
+
+const makeDoubleEntry = (value: ArrEntry) => {
+	switch (typeof(value)) {
+		case 'bigint': {
+			return Number(value);
+		}
+		case 'string': {
+			const parsedValue = parseFloat(value);
+			if (isNaN(parsedValue)) {
+				return 0;
+			}
+			return isNaN(parsedValue) ? 0 : parsedValue;
+		}
+		case 'boolean': {
+			return Number(value);
+		}
+		case 'number': {
+			return value;
+		}
+		default: {
+			throw new Error(`Unsupported type: ${typeof(value)}`);
+		}
+	}
+};
+
+const convertEntry = (value: ArrEntry, targetType: ValueType) => {
+	switch (targetType) {
+		case ValueType.INTEGER: {
+			return makeIntegerEntry(value);
+		}
+		case ValueType.STRING: {
+			return makeStringEntry(value);
+		}
+		case ValueType.BOOL: {
+			return makeBoolEntry(value);
+		}
+		case ValueType.DOUBLE: {
+			return makeDoubleEntry(value);
+		}
+		default: {
+			throw new Error(`Unknown ARR value type: ${typeof(targetType)}`);
+		}
+	}	
+};
 
 /**
  * Define the document (the data model) used for paw draw files.
@@ -50,7 +142,6 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
 	private readonly _uri: vscode.Uri;
 
 	private _entries: ArrEntry[] = [];
-	private _savedEntries: ArrEntry[] = [];
 
 	private constructor(
 		uri: vscode.Uri,
@@ -59,11 +150,13 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
 		super();
 		this._uri = uri;
 		this._entries = deserializeArray(initialContent.buffer);
-		this._savedEntries = [...this._entries];
 	}
 
 	public get uri() { return this._uri; }
-	public get entries(): ArrEntry[] { return this._entries; }
+	public get entries(): WebviewArrEntry[] { return this._entries.map(e => ({
+		type: Number(getValueType(e)).toString(),
+		value: makeStringEntry(e)
+	} as WebviewArrEntry)); }
 
 	private readonly _onDidDispose = this._register(new vscode.EventEmitter<void>());
 	/**
@@ -73,7 +166,7 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
 
 	private readonly _onDidChangeDocument = this._register(new vscode.EventEmitter<{
 		readonly content?: Uint8Array;
-		readonly entries: readonly ArrEntry[];
+		readonly entries: readonly WebviewArrEntry[];
 	}>());
 	/**
 	 * Fired to notify webviews that the document has changed.
@@ -107,27 +200,87 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
 	 *
 	 * This fires an event to notify VS Code that the document has been edited.
 	 */
-	addEntry(entry: ArrEntry) {
-		this._entries.push(entry);
+	addEntry(type: ValueType) {
+		const addedEntry = convertEntry('', type);
+		this._entries.push(addedEntry);
 
 		this._onDidChange.fire({
 			label: 'Add entry',
 			undo: async () => {
 				this._entries.pop();
 				this._onDidChangeDocument.fire({
-					entries: this._entries,
+					entries: this.entries,
 				});
 			},
 			redo: async () => {
-				this._entries.push(entry);
+				this._entries.push(addedEntry);
 				this._onDidChangeDocument.fire({
-					entries: this._entries,
+					entries: this.entries,
 				});
 			}
 		});
 
 		this._onDidChangeDocument.fire({
-			entries: this._entries,
+			entries: this.entries,
+		});
+	}
+
+	setType(index: number, type: ValueType) {
+		const backupValue = this._entries[index];
+		if (type === getValueType(backupValue)) {
+			return;
+		}
+		const modifiedValue = convertEntry(backupValue, type);
+		this._entries[index] = modifiedValue;
+
+		this._onDidChange.fire({
+			label: 'Convert entry',
+			undo: async () => {
+				this._entries[index] = backupValue;
+				this._onDidChangeDocument.fire({
+					entries: this.entries,
+				});
+			},
+			redo: async () => {
+				this._entries[index] = modifiedValue;
+				this._onDidChangeDocument.fire({
+					entries: this.entries,
+				});
+			}
+		});
+
+		this._onDidChangeDocument.fire({
+			entries: this.entries,
+		});
+	}
+
+	setValue(index: number, value: string) {
+		const backupValue = this._entries[index];
+		const currentType = getValueType(backupValue);
+		const modifiedValue = convertEntry(value, currentType);
+		if (backupValue === modifiedValue && makeStringEntry(backupValue) === value) {
+			return;
+		}
+		this._entries[index] = modifiedValue;
+
+		this._onDidChange.fire({
+			label: 'Set entry value',
+			undo: async () => {
+				this._entries[index] = backupValue;
+				this._onDidChangeDocument.fire({
+					entries: this.entries,
+				});
+			},
+			redo: async () => {
+				this._entries[index] = modifiedValue;
+				this._onDidChangeDocument.fire({
+					entries: this.entries,
+				});
+			}
+		});
+
+		this._onDidChangeDocument.fire({
+			entries: this.entries,
 		});
 	}
 
@@ -136,7 +289,6 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
 	 */
 	async save(cancellation: vscode.CancellationToken): Promise<void> {
 		await this.saveAs(this.uri, cancellation);
-		this._savedEntries = [...this._entries];
 	}
 
 	/**
@@ -158,10 +310,9 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
 	async revert(_cancellation: vscode.CancellationToken): Promise<void> {
 		const diskContent = await ArrDocument.readFile(this.uri);
 		this._entries = deserializeArray(diskContent.buffer);
-		this._savedEntries = [...this._entries];
 		this._onDidChangeDocument.fire({
 			content: diskContent,
-			entries: this._entries,
+			entries: this.entries,
 		});
 	}
 
@@ -404,7 +555,14 @@ export class ArrEditorProvider implements vscode.CustomEditorProvider<ArrDocumen
 					<tfoot>
 						<tr>
 							<td></td>
-							<td></td>
+							<td>
+								<select class="vscode-select">
+									<option value="1">INTEGER</option>
+									<option value="2">STRING</option>
+									<option value="3">BOOL</option>
+									<option value="4">DOUBLE</option>
+								</select>
+							</td>
 							<td>
 								<button id="arr-button-add-entry" class="vscode-button">
 									Add entry
@@ -428,7 +586,15 @@ export class ArrEditorProvider implements vscode.CustomEditorProvider<ArrDocumen
 	private onMessage(document: ArrDocument, message: any) {
 		switch (message.type) {
 			case 'add-entry': {
-				document.addEntry(message.data as ArrEntry);
+				document.addEntry(Number(message.data.type) as ValueType);
+				return;
+			}
+			case 'set-type': {
+				document.setType(message.data.index, Number(message.data.type) as ValueType);
+				return;
+			}
+			case 'set-value': {
+				document.setValue(message.data.index, message.data.value);
 				return;
 			}
 			case 'response':{

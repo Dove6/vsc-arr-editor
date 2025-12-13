@@ -1,7 +1,11 @@
-#arr-table-main th :not(:last-child), #arr-table-main tr :not(:last-child) {
+#arr-table-main th > :not(:last-child), #arr-table-main tr > :not(:last-child) {
 	width: fit-content;
 }
 
-#arr-table-main th :last-child, #arr-table-main tr :last-child {
+#arr-table-main th > :last-child, #arr-table-main tr > :last-child {
 	width: 100%;
+}
+
+#arr-table-main tr select {
+	width: fit-content;
 }
