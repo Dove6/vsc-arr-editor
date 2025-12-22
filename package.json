@@ -3,7 +3,7 @@
 	"displayName": "ARRnold - ARR Format Editor",
 	"description": "Custom editor for ARR data file",
 	"icon": "./arrLogo.png",
-	"version": "0.0.2",
+	"version": "0.0.3",
 	"publisher": "dove6",
 	"private": true,
 	"license": "MIT",
