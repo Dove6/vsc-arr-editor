@@ -9,3 +9,12 @@
 #arr-table-main tr select {
 	width: fit-content;
 }
+
+#arr-table-main tfoot button {
+	width: fit-content;
+}
+
+#arr-table-main tfoot td {
+	padding-left: 10px;
+	background-color: var(--vscode-keybindingTable-headerBackground);
+}
