@@ -27,6 +27,7 @@
 		/** @type {HTMLSelectElement} */ addingTypeSelect;
 		// @ts-ignore
 		/** @type {HTMLButtonElement} */ addingButton;
+		/** @type {HTMLTableRowElement | null} */ lastRightClickedRow = null;
 
 		constructor( /** @type {HTMLElement?} */ parent) {
 			if (!parent) {
@@ -129,6 +130,8 @@
 				});
 
 				const row = document.createElement('tr');
+				row.setAttribute('data-vscode-context', '{"webviewSection": "entry-row"}');
+				row.addEventListener('mousedown', _ => this.lastRightClickedRow = row);
 				row.appendChild(indexCell);
 				row.appendChild(typeCell);
 				row.appendChild(valueCell);
@@ -160,11 +163,37 @@
 				editor.setEditable(body.editable);
 				const entries = body.entries;
 				await editor.reset(entries);
+				break;
 			}
 			case 'update': {
 				const entries = body.entries;
 				await editor.reset(entries);
-				return;
+				break;
+			}
+			case 'context-remove': {
+				const rows = [...editor.mainTableBody.querySelectorAll(':scope > tr')];
+				const indices = rows.flatMap((e, i) => e.classList.contains('selected') ? [i] : []);
+				if (indices.length === 0) {
+					if (!editor.lastRightClickedRow) {
+						console.log('No row has been right clicked so far')
+						return;
+					}
+					const rowIndex = rows.indexOf(editor.lastRightClickedRow);
+					if (rowIndex < 0) {
+						console.log('The index of the element that is hovewer upon cannot be found')
+						return;
+					}
+					indices.push(rowIndex);
+				}
+				vscode.postMessage({
+					type: 'remove-entries',
+					data: { indices },
+				});
+				break;
+			}
+			case 'context-clear': {
+				vscode.postMessage({ type: 'clear-entries' });
+				break;
 			}
 		}
 	});

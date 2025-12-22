@@ -10,7 +10,7 @@ interface WebviewArrEntry {
 };
 
 const makeIntegerEntry = (value: ArrEntry) => {
-	switch (typeof(value)) {
+	switch (typeof (value)) {
 		case 'bigint': {
 			return value;
 		}
@@ -28,13 +28,13 @@ const makeIntegerEntry = (value: ArrEntry) => {
 			return BigInt(Math.trunc(value));
 		}
 		default: {
-			throw new Error(`Unsupported type: ${typeof(value)}`);
+			throw new Error(`Unsupported type: ${typeof (value)}`);
 		}
 	}
 };
 
 const makeStringEntry = (value: ArrEntry) => {
-	switch (typeof(value)) {
+	switch (typeof (value)) {
 		case 'bigint': {
 			return value.toString();
 		}
@@ -48,13 +48,13 @@ const makeStringEntry = (value: ArrEntry) => {
 			return value.toFixed(4);
 		}
 		default: {
-			throw new Error(`Unsupported type: ${typeof(value)}`);
+			throw new Error(`Unsupported type: ${typeof (value)}`);
 		}
 	}
 };
 
 const makeBoolEntry = (value: ArrEntry) => {
-	switch (typeof(value)) {
+	switch (typeof (value)) {
 		case 'bigint': {
 			return value === 0n;
 		}
@@ -68,13 +68,13 @@ const makeBoolEntry = (value: ArrEntry) => {
 			return value === 0;
 		}
 		default: {
-			throw new Error(`Unsupported type: ${typeof(value)}`);
+			throw new Error(`Unsupported type: ${typeof (value)}`);
 		}
 	}
 };
 
 const makeDoubleEntry = (value: ArrEntry) => {
-	switch (typeof(value)) {
+	switch (typeof (value)) {
 		case 'bigint': {
 			return Number(value);
 		}
@@ -92,7 +92,7 @@ const makeDoubleEntry = (value: ArrEntry) => {
 			return value;
 		}
 		default: {
-			throw new Error(`Unsupported type: ${typeof(value)}`);
+			throw new Error(`Unsupported type: ${typeof (value)}`);
 		}
 	}
 };
@@ -112,9 +112,9 @@ const convertEntry = (value: ArrEntry, targetType: ValueType) => {
 			return makeDoubleEntry(value);
 		}
 		default: {
-			throw new Error(`Unknown ARR value type: ${typeof(targetType)}`);
+			throw new Error(`Unknown ARR value type: ${typeof (targetType)}`);
 		}
-	}	
+	}
 };
 
 /**
@@ -153,10 +153,12 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
 	}
 
 	public get uri() { return this._uri; }
-	public get entries(): WebviewArrEntry[] { return this._entries.map(e => ({
-		type: Number(getValueType(e)).toString(),
-		value: makeStringEntry(e)
-	} as WebviewArrEntry)); }
+	public get entries(): WebviewArrEntry[] {
+		return this._entries.map(e => ({
+			type: Number(getValueType(e)).toString(),
+			value: makeStringEntry(e)
+		} as WebviewArrEntry));
+	}
 
 	private readonly _onDidDispose = this._register(new vscode.EventEmitter<void>());
 	/**
@@ -283,6 +285,62 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
 			entries: this.entries,
 		});
 	}
+	removeEntries(indices: number[]) {
+		indices = indices.toSorted((a, b) => a - b);
+		const backupEntries = indices.map(index => this._entries[index]);
+		for (const index of indices.toReversed()) {
+			this._entries.splice(index, 1);
+		}
+
+		this._onDidChange.fire({
+			label: 'Remove entries',
+			undo: async () => {
+				for (let i = 0; i < indices.length; i++) {
+					const index = indices[i];
+					this._entries.splice(index, 0, backupEntries[i]);
+				}
+				this._onDidChangeDocument.fire({
+					entries: this.entries,
+				});
+			},
+			redo: async () => {
+				for (const index of indices.toReversed()) {
+					this._entries.splice(index, 1);
+				}
+				this._onDidChangeDocument.fire({
+					entries: this.entries,
+				});
+			}
+		});
+
+		this._onDidChangeDocument.fire({
+			entries: this.entries,
+		});
+	}
+	clearEntries() {
+		const backupEntries = this._entries;
+		this._entries = [];
+
+		this._onDidChange.fire({
+			label: 'Clear entries',
+			undo: async () => {
+				this._entries = backupEntries;
+				this._onDidChangeDocument.fire({
+					entries: this.entries,
+				});
+			},
+			redo: async () => {
+				this._entries = [];
+				this._onDidChangeDocument.fire({
+					entries: this.entries,
+				});
+			}
+		});
+
+		this._onDidChangeDocument.fire({
+			entries: this.entries,
+		});
+	}
 
 	/**
 	 * Called by VS Code when the user saves the document.
@@ -393,7 +451,36 @@ export class ArrEditorProvider implements vscode.CustomEditorProvider<ArrDocumen
 
 	constructor(
 		private readonly _context: vscode.ExtensionContext
-	) { }
+	) {
+		vscode.commands.registerCommand('arrEditor.editor.deleteRow', () => {
+			const { uri, viewType } = vscode.window.tabGroups.activeTabGroup.activeTab?.input as vscode.TabInputCustom;
+			if (viewType !== 'arrEditor.editor') {
+				return;
+			}
+			const panel = [...this.webviews.get(uri)].find(e => e.active);
+			if (!panel) {
+				console.log('No active webview panel found');
+				return;
+			}
+			panel.webview.postMessage({
+				type: 'context-remove'
+			});
+		});
+		vscode.commands.registerCommand('arrEditor.editor.deleteAllRows', () => {
+			const { uri, viewType } = vscode.window.tabGroups.activeTabGroup.activeTab?.input as vscode.TabInputCustom;
+			if (viewType !== 'arrEditor.editor') {
+				return;
+			}
+			const panel = [...this.webviews.get(uri)].find(e => e.active);
+			if (!panel) {
+				console.log('No active webview panel found');
+				return;
+			}
+			panel.webview.postMessage({
+				type: 'context-clear'
+			});
+		});
+	}
 
 	//#region CustomEditorProvider
 
@@ -434,6 +521,7 @@ export class ArrEditorProvider implements vscode.CustomEditorProvider<ArrDocumen
 		webviewPanel: vscode.WebviewPanel,
 		_token: vscode.CancellationToken
 	): Promise<void> {
+		console.log('Resolving custom editor', webviewPanel);
 		// Add the webview to our internal set of active webviews
 		this.webviews.add(document.uri, webviewPanel);
 
@@ -577,8 +665,6 @@ export class ArrEditorProvider implements vscode.CustomEditorProvider<ArrDocumen
 			</html>`;
 	}
 
-	private readonly _callbacks = new Map<number, (response: any) => void>();
-
 	private postMessage(panel: vscode.WebviewPanel, type: string, body: any): void {
 		panel.webview.postMessage({ type, body });
 	}
@@ -586,20 +672,23 @@ export class ArrEditorProvider implements vscode.CustomEditorProvider<ArrDocumen
 	private onMessage(document: ArrDocument, message: any) {
 		switch (message.type) {
 			case 'add-entry': {
-				document.addEntry(Number(message.data.type) as ValueType);
+				document.addEntry(Number(message.data.type));
 				return;
 			}
 			case 'set-type': {
-				document.setType(message.data.index, Number(message.data.type) as ValueType);
+				document.setType(message.data.index, Number(message.data.type));
 				return;
 			}
 			case 'set-value': {
 				document.setValue(message.data.index, message.data.value);
 				return;
 			}
-			case 'response':{
-				const callback = this._callbacks.get(message.requestId);
-				callback?.(message.body);
+			case 'remove-entries': {
+				document.removeEntries(message.data.indices);
+				return;
+			}
+			case 'clear-entries': {
+				document.clearEntries();
 				return;
 			}
 		}

@@ -37,10 +37,32 @@
 				]
 			}
 		],
+		"menus": {
+			"webview/context": [
+				{
+					"command": "arrEditor.editor.deleteRow",
+					"when": "activeCustomEditorId == 'arrEditor.editor' && webviewSection == 'entry-row'"
+				},
+				{
+					"command": "arrEditor.editor.deleteAllRows",
+					"when": "activeCustomEditorId == 'arrEditor.editor' && webviewSection == 'entry-row'"
+				}
+			]
+		},
 		"commands": [
 			{
 				"command": "arrEditor.editor.new",
 				"title": "Create new ARR file",
+				"category": "ARR"
+			},
+			{
+				"command": "arrEditor.editor.deleteRow",
+				"title": "Remove row",
+				"category": "ARR"
+			},
+			{
+				"command": "arrEditor.editor.deleteAllRows",
+				"title": "Clear rows",
 				"category": "ARR"
 			}
 		]
