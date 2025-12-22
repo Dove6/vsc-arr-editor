@@ -106,7 +106,7 @@
 						},
 					});
 				});
-				
+
 				const indexCell = document.createElement('td');
 				const typeCell = document.createElement('td');
 				const valueCell = document.createElement('td');
@@ -168,6 +168,23 @@
 			case 'update': {
 				const entries = body.entries;
 				await editor.reset(entries);
+				break;
+			}
+			case 'context-insert': {
+				if (!editor.lastRightClickedRow) {
+					console.log('No row has been right clicked so far')
+					return;
+				}
+				const rows = [...editor.mainTableBody.querySelectorAll(':scope > tr')];
+				const index = rows.indexOf(editor.lastRightClickedRow);
+				if (index < 0) {
+					console.log('The index of the element that is hovewer upon cannot be found')
+					return;
+				}
+				vscode.postMessage({
+					type: 'insert-entry',
+					data: { index },
+				});
 				break;
 			}
 			case 'context-remove': {

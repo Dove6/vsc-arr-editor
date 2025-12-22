@@ -285,6 +285,32 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
 			entries: this.entries,
 		});
 	}
+
+	insertEntry(index: number, type: ValueType) {
+		const addedEntry = convertEntry('', type);
+		this._entries.splice(index, 0, addedEntry);
+
+		this._onDidChange.fire({
+			label: 'Insert entry',
+			undo: async () => {
+				this._entries.splice(index, 1);
+				this._onDidChangeDocument.fire({
+					entries: this.entries,
+				});
+			},
+			redo: async () => {
+				this._entries.splice(index, 0, addedEntry);
+				this._onDidChangeDocument.fire({
+					entries: this.entries,
+				});
+			}
+		});
+
+		this._onDidChangeDocument.fire({
+			entries: this.entries,
+		});
+	}
+
 	removeEntries(indices: number[]) {
 		indices = indices.toSorted((a, b) => a - b);
 		const backupEntries = indices.map(index => this._entries[index]);
@@ -317,6 +343,7 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
 			entries: this.entries,
 		});
 	}
+
 	clearEntries() {
 		const backupEntries = this._entries;
 		this._entries = [];
@@ -452,7 +479,7 @@ export class ArrEditorProvider implements vscode.CustomEditorProvider<ArrDocumen
 	constructor(
 		private readonly _context: vscode.ExtensionContext
 	) {
-		vscode.commands.registerCommand('arrEditor.editor.deleteRow', () => {
+		const createContextCommand = (messageType: string) => (() => {
 			const { uri, viewType } = vscode.window.tabGroups.activeTabGroup.activeTab?.input as vscode.TabInputCustom;
 			if (viewType !== 'arrEditor.editor') {
 				return;
@@ -463,23 +490,13 @@ export class ArrEditorProvider implements vscode.CustomEditorProvider<ArrDocumen
 				return;
 			}
 			panel.webview.postMessage({
-				type: 'context-remove'
+				type: messageType,
 			});
 		});
-		vscode.commands.registerCommand('arrEditor.editor.deleteAllRows', () => {
-			const { uri, viewType } = vscode.window.tabGroups.activeTabGroup.activeTab?.input as vscode.TabInputCustom;
-			if (viewType !== 'arrEditor.editor') {
-				return;
-			}
-			const panel = [...this.webviews.get(uri)].find(e => e.active);
-			if (!panel) {
-				console.log('No active webview panel found');
-				return;
-			}
-			panel.webview.postMessage({
-				type: 'context-clear'
-			});
-		});
+
+		vscode.commands.registerCommand('arrEditor.editor.deleteRow', createContextCommand('context-remove'));
+		vscode.commands.registerCommand('arrEditor.editor.deleteAllRows', createContextCommand('context-clear'));
+		vscode.commands.registerCommand('arrEditor.editor.insertRow', createContextCommand('context-insert'));
 	}
 
 	//#region CustomEditorProvider
@@ -681,6 +698,10 @@ export class ArrEditorProvider implements vscode.CustomEditorProvider<ArrDocumen
 			}
 			case 'set-value': {
 				document.setValue(message.data.index, message.data.value);
+				return;
+			}
+			case 'insert-entry': {
+				document.insertEntry(message.data.index, Number(message.data.type ?? ValueType.INTEGER));
 				return;
 			}
 			case 'remove-entries': {

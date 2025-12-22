@@ -40,6 +40,10 @@
 		"menus": {
 			"webview/context": [
 				{
+					"command": "arrEditor.editor.insertRow",
+					"when": "activeCustomEditorId == 'arrEditor.editor' && webviewSection == 'entry-row'"
+				},
+				{
 					"command": "arrEditor.editor.deleteRow",
 					"when": "activeCustomEditorId == 'arrEditor.editor' && webviewSection == 'entry-row'"
 				},
@@ -53,6 +57,11 @@
 			{
 				"command": "arrEditor.editor.new",
 				"title": "Create new ARR file",
+				"category": "ARR"
+			},
+			{
+				"command": "arrEditor.editor.insertRow",
+				"title": "Insert row before",
 				"category": "ARR"
 			},
 			{
