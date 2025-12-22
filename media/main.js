@@ -95,6 +95,7 @@
 			}
 			for (let i = this.mainTableBody.children.length; i < this.entries.length; i++) {
 				const typeSelect = ArrEditor._createTypeSelect();
+				typeSelect.value = this.entries[i].type;
 				typeSelect.addEventListener('input', () => {
 					vscode.postMessage({
 						type: 'set-type',
