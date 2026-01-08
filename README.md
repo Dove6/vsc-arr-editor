@@ -9,6 +9,10 @@ The package is a part of the reimplementation of the PiKlib/BlooMoo engine Reksi
 
 ## Release Notes
 
+### 0.0.6
+
+- [Prevent crashes for empty ARR files](https://github.com/Dove6/vsc-arr-editor/commit/546764e1dcc3c4c30fbb8701e041596c48e08cab)
+
 ### 0.0.5
 
 - [Fix incorrectly named buffer polyfill for browser](https://github.com/Dove6/vsc-arr-editor/commit/cb9759172bb993fbfe2c48ec5196393598bba47d)
