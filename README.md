@@ -9,6 +9,10 @@ The package is a part of the reimplementation of the PiKlib/BlooMoo engine Reksi
 
 ## Release Notes
 
+### 0.0.5
+
+- [Fix incorrectly named buffer polyfill for browser](https://github.com/Dove6/vsc-arr-editor/commit/cb9759172bb993fbfe2c48ec5196393598bba47d)
+
 ### 0.0.4
 
 - [Allow the extension to be used in browser](https://github.com/Dove6/vsc-arr-editor/commit/f9fe6b86bc89504439bda70b882e5d2c3e318ae0)
