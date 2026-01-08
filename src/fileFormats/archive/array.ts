@@ -36,6 +36,9 @@ export const getValueType = (entry: ArrEntry) => {
 };
 
 export const deserializeArray = (data: ArrayBufferLike) => {
+	if (data.byteLength === 0) {
+		return [];
+	}
 	const buffer = new BinaryBuffer(new DataView(data));
 	const count = buffer.getUint32();
 
