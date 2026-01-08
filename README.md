@@ -9,6 +9,10 @@ The package is a part of the reimplementation of the PiKlib/BlooMoo engine Reksi
 
 ## Release Notes
 
+### 0.0.4
+
+- [Allow the extension to be used in browser](https://github.com/Dove6/vsc-arr-editor/commit/f9fe6b86bc89504439bda70b882e5d2c3e318ae0)
+
 ### 0.0.3
 
 - [Make entries editable](https://github.com/Dove6/vsc-arr-editor/commit/97a54d4e171c21011423298435578c2e49391d72)
