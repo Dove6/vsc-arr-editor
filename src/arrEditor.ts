@@ -129,6 +129,7 @@ class ArrDocument extends Disposable implements vscode.CustomDocument {
 		// If we have a backup, read that. Otherwise read the resource from the workspace
 		const dataFile = typeof backupId === 'string' ? vscode.Uri.parse(backupId) : uri;
 		const fileData = await ArrDocument.readFile(dataFile);
+		// TODO: on Firefox, vscode.dev with no workspace returns empty buffer
 		return new ArrDocument(uri, fileData as Uint8Array<ArrayBuffer>);
 	}
 
