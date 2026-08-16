@@ -9,6 +9,10 @@ The package is a part of the reimplementation of the PiKlib/BlooMoo engine Reksi
 
 ## Release Notes
 
+### 0.0.7
+
+- [Fix "Cannot read properties of undefined (reading 'encode')"](https://github.com/Dove6/vsc-arr-editor/commit/7e9892e001d209d7b1941e172c54a85343c538a1)
+
 ### 0.0.6
 
 - [Prevent crashes for empty ARR files](https://github.com/Dove6/vsc-arr-editor/commit/546764e1dcc3c4c30fbb8701e041596c48e08cab)
