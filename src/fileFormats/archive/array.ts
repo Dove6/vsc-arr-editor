@@ -1,9 +1,9 @@
 import { BinaryBuffer, createGrowableDataView } from '../utils';
-import IconvLite from 'iconv-lite';
+import { encode } from 'iconv-lite';
 
 const decoder = new TextDecoder('windows-1250');
 const encoder = {
-	encode: (input: string) => IconvLite.encode(input, 'windows-1250')
+	encode: (input: string) => encode(input, 'windows-1250')
 };
 
 export type ArrEntry = bigint | string | boolean | number;
